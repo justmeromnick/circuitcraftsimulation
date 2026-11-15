@@ -455,15 +455,46 @@ body.levels-panel-hidden #chromeContent #phoneNavigation{display:none!important}
 body[data-screen="menu"] #currentLessonBar{display:none!important}
 body.levels-panel-hidden #chromeContent #phoneNavigation{display:none!important}
 @media(max-width:600px){#levelChoiceButtons{grid-template-columns:repeat(5,minmax(0,1fr))}#levelChoiceButtons button{min-height:34px}#currentLessonTitle{font-size:12px}}
-</style></head>
+</style><style id="ccAuthStyles">
+/* Circuit Craft authentication gate. Configure Firebase before classroom deployment. */
+#ccAuthGate[hidden]{display:none!important}
+#ccAuthGate{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:18px;overflow:auto;background:radial-gradient(circle at 15% 15%,#274638,#0b1514 70%);color:#f5f5f4}
+.cc-auth-card{width:min(100%,440px);padding:28px;background:#172521;border:1px solid #637a69;border-radius:18px;box-shadow:0 25px 80px #0008;display:grid;gap:12px}
+.cc-auth-card h2{font-size:26px;font-weight:800}.cc-auth-card p{color:#cbd5cf;font-size:13px;line-height:1.5}
+.cc-auth-card label{font-size:13px;font-weight:650}.cc-auth-card input{display:block;width:100%;margin-top:5px;padding:12px;background:#fff;color:#172521;border-radius:8px;font-size:16px}
+.cc-auth-card button{width:100%;padding:12px;border-radius:9px;background:#facc54;color:#14211b;font-weight:800;min-height:46px}
+.cc-auth-card button.cc-secondary{background:#2b4036;color:#fff;border:1px solid #718477}
+.cc-auth-card button:disabled{opacity:.5;cursor:wait}.cc-auth-row{display:flex;gap:8px}.cc-auth-row button{flex:1}
+#ccAuthError{color:#fecaca!important;min-height:1.5em}#ccAuthSetup{color:#fcd34d!important}
+#ccAuthIdentity{font-size:12px;color:#cbd5cf;overflow-wrap:anywhere}
+@media(max-width:480px){.cc-auth-card{padding:18px}.cc-auth-card h2{font-size:22px}}
+</style>
+</head>
 <body data-screen="menu" class="flex flex-col h-screen w-screen overflow-hidden bg-stone-950">
+
+<section id="ccAuthGate" aria-label="Student login and registration" role="dialog" aria-modal="true">
+ <form class="cc-auth-card" id="ccAuthForm">
+  <span style="color:#facc54;font-size:12px;font-weight:800;letter-spacing:.12em">⚡ CIRCUIT CRAFT · STUDENT ACCESS</span>
+  <h2 id="ccAuthTitle">Log in</h2>
+  <p>Sign in before starting your electrical circuit lessons.</p>
+  <label>Email address<input id="ccAuthEmail" type="email" autocomplete="email" required placeholder="student@example.com"></label>
+  <label>Password<input id="ccAuthPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters"></label>
+  <button type="submit" id="ccAuthSubmit">Log in</button>
+  <button type="button" id="ccAuthSwitch" class="cc-secondary">Create a new account</button>
+  <p style="text-align:center">or continue with</p>
+  <div class="cc-auth-row"><button type="button" id="ccAuthGoogle" class="cc-secondary">Google</button><button type="button" id="ccAuthFacebook" class="cc-secondary">Facebook</button></div>
+  <p id="ccAuthError" role="alert"></p>
+  <p id="ccAuthSetup" hidden>Teacher setup required: add your Firebase project configuration and enable the sign-in providers. This login cannot work directly from a local file.</p>
+ </form>
+</section>
+
 
     <!-- Top Header & Workspace Controls -->
     
 <section id="startScreen" aria-label="Main menu">
  <div class="menu-shell">
   <div class="menu-intro"><span class="menu-eyebrow">12 V DC • ELECTRICAL LAB</span><div class="menu-bolt" aria-hidden="true">ϟ</div><h1>CIRCUIT<br><em>CRAFT</em></h1><p>Make the connection.<br>Light up your next challenge.</p><span class="menu-meta">10 symbols · 9 wiring challenges</span></div>
-  <div class="menu-card" id="mainMenuPanel"><span class="menu-eyebrow">READY TO POWER UP?</span><h2>Your workshop awaits.</h2><button class="menu-primary" id="playGameBtn" onclick="startGame()">▶ Play</button><button onclick="openGameSettings()">⚙ Settings</button><p class="menu-footnote">Practice, connect, and learn. No account required.</p></div>
+  <div class="menu-card" id="mainMenuPanel"><span class="menu-eyebrow">READY TO POWER UP?</span><h2>Your workshop awaits.</h2><button class="menu-primary" id="playGameBtn" onclick="startGame()">▶ Play</button><button onclick="openGameSettings()">⚙ Settings</button><p class="menu-footnote">Practice, connect, and learn with your student account. <span id="ccAuthIdentity"></span><button type="button" id="ccSignOutBtn" class="cc-secondary" style="margin-top:8px" onclick="ccSignOut()">Sign out</button></p></div>
   <div class="menu-card" id="settingsPanel" hidden><h2>Settings</h2><label for="masterVolume">Sound volume <output id="volumeValue">60%</output></label><input id="masterVolume" type="range" min="0" max="100" value="60" oninput="setGameVolume(this.value)"><div class="sound-options"><button id="settingsMusicBtn" onclick="toggleMusic()">Music: ON</button><button id="settingsSfxBtn" onclick="toggleSFX()">Effects: ON</button></div><button onclick="previewGameSound()">♪ Test sound</button><button class="menu-primary" onclick="showMainMenu()">Back to menu</button></div>
  </div>
 </section>
@@ -3398,5 +3429,85 @@ function resetCircuitCraftAssessment(boundary){
  refreshProgressLocks();return true;
 }
 document.addEventListener('DOMContentLoaded',refreshProgressLocks);
-</script></body>
+</script>
+<!-- Firebase Authentication: public client SDK, never put service account keys here. -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script id="ccAuthScript">
+/* SETUP: Replace these placeholders with Firebase Console > Project settings > Your apps > Web app config.
+   Firebase Authentication > Sign-in method: enable Email/Password, Google, and Facebook.
+   For Facebook, configure Meta app ID/secret in Firebase Console (NOT in this HTML),
+   add the Firebase OAuth callback URL to Meta, and authorize your hosted domain in Firebase.
+   Publish over HTTPS (e.g. GitHub Pages / Firebase Hosting); file:// OAuth is unsupported.
+*/
+const CC_FIREBASE_CONFIG = {
+ apiKey: "PASTE_FIREBASE_API_KEY",
+ authDomain: "YOUR_PROJECT.firebaseapp.com",
+ projectId: "YOUR_PROJECT_ID",
+ appId: "PASTE_FIREBASE_APP_ID"
+};
+let ccFirebaseAuth = null;
+let ccAuthenticatedUser = null;
+let ccCreatingAccount = false;
+const ccAuthGate = document.getElementById('ccAuthGate');
+const ccAuthError = document.getElementById('ccAuthError');
+const ccAuthSubmit = document.getElementById('ccAuthSubmit');
+function ccAuthMessage(message){ccAuthError.textContent=message || '';}
+function ccAuthBusy(busy){for(const id of ['ccAuthSubmit','ccAuthSwitch','ccAuthGoogle','ccAuthFacebook']) document.getElementById(id).disabled=!!busy;}
+function ccAuthReady(){
+ return Boolean(window.firebase && firebase.auth && CC_FIREBASE_CONFIG.apiKey !== 'PASTE_FIREBASE_API_KEY' && CC_FIREBASE_CONFIG.appId !== 'PASTE_FIREBASE_APP_ID' && !CC_FIREBASE_CONFIG.projectId.includes('YOUR_PROJECT'));
+}
+function ccShowAuth(){ccAuthGate.hidden=false;document.getElementById('ccAuthPassword').value='';}
+function ccSetUser(user){
+ ccAuthenticatedUser=user;
+ ccAuthGate.hidden=!!user;
+ document.getElementById('ccAuthIdentity').textContent=user?'Signed in: '+(user.displayName || user.email || user.uid):'';
+ if(!user && document.body.dataset.screen==='game' && typeof showMainMenu==='function')showMainMenu();
+}
+async function ccSignOut(){
+ if(!ccFirebaseAuth){ccShowAuth();return;}
+ try{await ccFirebaseAuth.signOut();}catch(error){ccAuthMessage(error.message||'Unable to sign out.');}
+}
+// Guard the original Play action even if a student tries to invoke it directly from the console.
+const ccOriginalStartGame = startGame;
+startGame = function(){if(!ccAuthenticatedUser){ccShowAuth();return;} return ccOriginalStartGame.apply(this, arguments);};
+document.getElementById('ccAuthSwitch').addEventListener('click',()=>{
+ ccCreatingAccount=!ccCreatingAccount;
+ document.getElementById('ccAuthTitle').textContent=ccCreatingAccount?'Create account':'Log in';
+ ccAuthSubmit.textContent=ccCreatingAccount?'Sign up':'Log in';
+ document.getElementById('ccAuthSwitch').textContent=ccCreatingAccount?'Already registered? Log in':'Create a new account';
+ document.getElementById('ccAuthPassword').autocomplete=ccCreatingAccount?'new-password':'current-password';
+ ccAuthMessage('');
+});
+document.getElementById('ccAuthForm').addEventListener('submit',async event=>{
+ event.preventDefault(); if(!ccFirebaseAuth){ccAuthMessage('Authentication is not configured yet. Ask your instructor.');return;}
+ ccAuthBusy(true);ccAuthMessage('');
+ try{
+  const email=document.getElementById('ccAuthEmail').value.trim();
+  const password=document.getElementById('ccAuthPassword').value;
+  if(ccCreatingAccount)await ccFirebaseAuth.createUserWithEmailAndPassword(email,password);
+  else await ccFirebaseAuth.signInWithEmailAndPassword(email,password);
+ }catch(error){ccAuthMessage(error.message||'Authentication failed.');}finally{ccAuthBusy(false);}
+});
+async function ccSocialSignIn(provider){
+ if(!ccFirebaseAuth){ccAuthMessage('Authentication is not configured yet. Ask your instructor.');return;}
+ ccAuthBusy(true);ccAuthMessage('');
+ try{await ccFirebaseAuth.signInWithPopup(provider==='google'?new firebase.auth.GoogleAuthProvider():new firebase.auth.FacebookAuthProvider());}
+ catch(error){ccAuthMessage(error.code==='auth/popup-blocked'?'Your browser blocked the sign-in window. Allow pop-ups and try again.':error.message||'Social sign-in failed.');}
+ finally{ccAuthBusy(false);}
+}
+document.getElementById('ccAuthGoogle').addEventListener('click',()=>ccSocialSignIn('google'));
+document.getElementById('ccAuthFacebook').addEventListener('click',()=>ccSocialSignIn('facebook'));
+try{
+ if(!ccAuthReady()){
+  document.getElementById('ccAuthSetup').hidden=false;
+  ccAuthMessage(window.firebase?'Firebase project settings must be configured by your teacher.':'Cannot load Firebase. An internet connection is required to sign in.');
+ }else{
+  firebase.initializeApp(CC_FIREBASE_CONFIG);
+  ccFirebaseAuth=firebase.auth();
+  ccFirebaseAuth.onAuthStateChanged(ccSetUser,error=>ccAuthMessage(error.message||'Sign-in state unavailable.'));
+ }
+}catch(error){ccAuthMessage('Authentication setup error: '+(error.message||error));document.getElementById('ccAuthSetup').hidden=false;}
+</script>
+</body>
 </html>
